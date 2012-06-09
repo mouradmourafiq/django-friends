@@ -1,33 +1,39 @@
-import datetime
+# -*- coding: utf-8 -*-
+'''
+Created on Mar 01, 2011
 
-from random import random
+@author: Mourad Mourafiq
 
+@license: closed application, My_licence, http://www.binpress.com/license/view/l/6f5700aefd2f24dd0a21d509ebd8cdf8
+
+@copyright: Copyright © 2011
+
+other contributers:
+'''
 from django.conf import settings
+from django.contrib.auth.models import User
+from django.contrib.sites.models import Site
+from django.core.mail import send_mail
 from django.core.urlresolvers import reverse
+from django.utils.translation import ugettext_lazy as _
 from django.db import models
 from django.db.models import signals
 from django.template.loader import render_to_string
 from django.utils.hashcompat import sha_constructor
+from django.db.models import Q
+from emailconfirmation.models import EmailAddress
+from lists.models import RelationList
+from notification import models as notification
+from random import random
+import datetime
 
-from django.contrib.sites.models import Site
-from django.contrib.auth.models import User
 
-# favour django-mailer but fall back to django.core.mail
-if "mailer" in settings.INSTALLED_APPS:
-    from mailer import send_mail
-else:
-    from django.core.mail import send_mail
 
-if "notification" in settings.INSTALLED_APPS:
-    from notification import models as notification
-else:
-    notification = None
-
-if "emailconfirmation" in settings.INSTALLED_APPS:
-    from emailconfirmation.models import EmailAddress
-else:
-    EmailAddress = None
-
+RELATION_STATUS = (
+    ("1", "Active"),
+    ("2", "Inactive"),
+    ("2", "Blocked"),
+    )
 
 class Contact(models.Model):
     """
@@ -36,11 +42,11 @@ class Contact(models.Model):
     """
     
     # the user who created the contact
-    user = models.ForeignKey(User, related_name="contacts")
+    user = models.ForeignKey(User, related_name=_("contacts"))
     
     name = models.CharField(max_length=100, null=True, blank=True)
     email = models.EmailField()
-    added = models.DateField(default=datetime.date.today)
+    created_at = models.DateField(default=datetime.date.today)
     
     # the user(s) this contact correspond to
     users = models.ManyToManyField(User)
@@ -48,31 +54,80 @@ class Contact(models.Model):
     def __unicode__(self):
         return "%s (%s's contact)" % (self.email, self.user)
 
-
 class FriendshipManager(models.Manager):
     
     def friends_for_user(self, user):
+        """
+        Returns all friends for a specific user
+        """
         friends = []
-        for friendship in self.filter(from_user=user).select_related(depth=1):
+        for friendship in Friendship.active.all().filter(from_user=user).select_related(depth=1):
             friends.append({"friend": friendship.to_user, "friendship": friendship})
-        for friendship in self.filter(to_user=user).select_related(depth=1):
+        for friendship in Friendship.active.all().filter(to_user=user).select_related(depth=1):
             friends.append({"friend": friendship.from_user, "friendship": friendship})
         return friends
     
-    def are_friends(self, user1, user2):
-        if self.filter(from_user=user1, to_user=user2).count() > 0:
+    def in_active_relation(self, from_user, to_user):
+        """
+        checks if the users are in an active relation
+        """
+        if Friendship.active.all().filter(from_user=from_user, to_user=to_user).count() > 0:
             return True
-        if self.filter(from_user=user2, to_user=user1).count() > 0:
+        if Friendship.active.all().filter(from_user=to_user, to_user=from_user).count() > 0:
             return True
         return False
     
-    def remove(self, user1, user2):
-        if self.filter(from_user=user1, to_user=user2):
-            friendship = self.filter(from_user=user1, to_user=user2)
-        elif self.filter(from_user=user2, to_user=user1):
-            friendship = self.filter(from_user=user2, to_user=user1)
-        friendship.delete()
+    def in_relation(self, from_user, to_user):
+        """
+        check if the from_user is in a relation with to_user
+        """
+        if self.filter(from_user=from_user, to_user=to_user).count() > 0:
+            return True
+        if self.filter(from_user=to_user, to_user=from_user).count() > 0:
+            return True
+        return False
+    
+    def are_friends(self, userf, usert):
+        """
+        Checks if the users are friends
+        """
+        if (Friendship.active.all().filter(from_user=userf, to_user=usert, relation_mutual=True, relation_status="1").count() > 0 and
+        Friendship.active.all().filter(from_user=usert, to_user=userf, relation_status="1", relation_mutual=True).count() > 0):
+            return True                    
+        return False
+        
+    def is_follower(self, userf, usert):
+        """
+        checks for followship relation 
+        """
+        if Friendship.active.all().filter(from_user=userf, to_user=usert, relation_mutual=False).count() > 0:
+            return True
+        return False
+        
+    def is_followed(self, usert, userf):
+        """
+        checks for followship relation 
+        """
+        if Friendship.active.all().filter(from_user=userf, to_user=usert, relation_mutual=False).count() > 0:
+            return True
+        return False
+    
+    def remove_friendship(self, from_user, to_user):
+        friendship = Friendship.active.all().filter(from_user=from_user, to_user=to_user)
+        if friendship.count() > 0:        
+            friendship[0].cancel()
+        friendship = Friendship.active.all().filter(from_user=to_user, to_user=from_user)
+        if friendship.count() > 0:
+            friendship[0].cancel()
+        
+    def remove_followship(self, from_user, to_user):
+        friendship = Friendship.active.all().filter(from_user=from_user, to_user=to_user)
+        if friendship.count() > 0:
+            friendship[0].cancel()        
 
+class ActiveFriendshipManager(models.Manager):
+    def get_query_set(self):
+        return super(ActiveFriendshipManager, self).get_query_set().filter(relation_status="1")
 
 class Friendship(models.Model):
     """
@@ -80,17 +135,48 @@ class Friendship(models.Model):
     have both agreed to the association.
     """
     
-    to_user = models.ForeignKey(User, related_name="friends")
-    from_user = models.ForeignKey(User, related_name="_unused_")
-    # @@@ relationship types
-    added = models.DateField(default=datetime.date.today)
+    
+    to_user = models.ForeignKey(User, related_name="friends_to")
+    from_user = models.ForeignKey(User, related_name="friends_from")
+    relation_mutual = models.BooleanField()    
+    created_at = models.DateField(default=datetime.date.today)
+    relation_status = models.CharField(max_length=1, choices=RELATION_STATUS, default="1")
+    relation_set = models.ForeignKey(RelationList, null=True, blank=True, related_name="friends_by_list") 
+
+    
     
     objects = FriendshipManager()
-    
+    active = ActiveFriendshipManager()
     class Meta:
         unique_together = (('to_user', 'from_user'),)
-
-
+    
+    def block(self):
+        """
+        block a relation between two people
+        both wouldn't be able to access to each other profile
+        """
+        self.relation_status = "2"
+        self.save()
+    
+    def cancel(self):
+        """
+        cancel relation
+        """
+        self.relation_status = "2"
+        self.relation_mutual  = False
+        self.save()
+        
+    def reactivate(self):
+        """
+        reactivate relation
+        """
+        self.relation_status = "1"        
+        self.save()
+    
+    def custom_relation_set(self, set):
+        self.relation_set = set
+        self.save()
+        
 def friend_set_for(user):
     return set([obj["friend"] for obj in Friendship.objects.friends_for_user(user)])
 
@@ -114,7 +200,7 @@ class JoinInvitationManager(models.Manager):
         salt = sha_constructor(str(random())).hexdigest()[:5]
         confirmation_key = sha_constructor(salt + to_email).hexdigest()
         
-        accept_url = u"http://%s%s" % (
+        accept_url = "http://%s%s" % (
             unicode(Site.objects.get_current()),
             reverse("friends_accept_join", args=(confirmation_key,)),
         )
@@ -162,13 +248,12 @@ class JoinInvitation(models.Model):
             friends = []
             for user in friend_set_for(new_user) | friend_set_for(self.from_user):
                 if user != new_user and user != self.from_user:
-                    friends.append(user)
-            notification.send(friends, "friends_otherconnect", {"invitation": self, "to_user": new_user})
+                    friends.append(user)            
 
 
 class FriendshipInvitationManager(models.Manager):
     
-    def invitations(self, *args, **kwargs):
+    def invitations(self, *args, **kwargs):                
         return self.filter(*args, **kwargs).exclude(status__in=["6", "8"])
 
 
@@ -182,29 +267,70 @@ class FriendshipInvitation(models.Model):
     to_user = models.ForeignKey(User, related_name="invitations_to")
     message = models.TextField()
     sent = models.DateField(default=datetime.date.today)
-    status = models.CharField(max_length=1, choices=INVITE_STATUS)
-    
+    status = models.CharField(max_length=1, choices=INVITE_STATUS)    
+    relationship_mutual = models.BooleanField()    
     objects = FriendshipInvitationManager()
-    
+        
     def accept(self):
-        if not Friendship.objects.are_friends(self.to_user, self.from_user):
-            friendship = Friendship(to_user=self.to_user, from_user=self.from_user)
+        if not Friendship.objects.in_relation(self.from_user, self.to_user):     
+            friendship = Friendship(to_user=self.to_user, from_user=self.from_user, relation_mutual=self.relationship_mutual)
+            if self.relationship_mutual:
+                    Friendship(to_user=self.from_user, from_user=self.to_user, relation_mutual=self.relationship_mutual).save()
             friendship.save()
             self.status = "5"
             self.save()
-            if notification:
-                notification.send([self.from_user], "friends_accept", {"invitation": self})
-                notification.send([self.to_user], "friends_accept_sent", {"invitation": self})
-                for user in friend_set_for(self.to_user) | friend_set_for(self.from_user):
-                    if user != self.to_user and user != self.from_user:
-                        notification.send([user], "friends_otherconnect", {"invitation": self, "to_user": self.to_user})
-    
+            #if notification:
+                #notification.send([self.from_user], "friends_accept", {"invitation": self})                            
+        else :
+            etat2 = True
+            try:
+                friendship1 = Friendship.objects.get(to_user=self.to_user, from_user=self.from_user)
+                try:
+                    friendship2 = Friendship.objects.get(to_user=self.from_user, from_user=self.to_user)                    
+                except:
+                    etat2 = False
+            except :
+                try:
+                    friendship1 = Friendship.objects.get(to_user=self.from_user, from_user=self.to_user)
+                    user_save = self.to_user
+                    self.to_user = self.from_user
+                    self.from_user = user_save
+                    etat2 = False
+                except:
+                    etat2 = False
+            if friendship1.relation_mutual and self.relationship_mutual:
+                friendship1.reactivate()
+                friendship2.reactivate()
+            elif not friendship1.relation_mutual and not self.relationship_mutual:
+                friendship1.reactivate()
+            elif friendship1.relation_mutual and not self.relationship_mutual:                
+                friendship1.relation_mutual = self.relationship_mutual
+                friendship2.relation_mutual = self.relationship_mutual
+                friendship1.reactivate()
+            elif not friendship1.relation_mutual and self.relationship_mutual:
+                friendship1.relation_mutual = self.relationship_mutual
+                friendship1.reactivate()
+                if etat2:
+                    friendship2.relation_mutual = self.relationship_mutual
+                    friendship2.reactivate()
+                else:
+                    Friendship(to_user=self.from_user, from_user=self.to_user, relation_mutual=self.relationship_mutual).save()
+                    
+            self.status = "5"
+            self.save()
+            #if notification:
+                #notification.send([self.from_user], "friends_accept", {"invitation": self})
+            
     def decline(self):
-        if not Friendship.objects.are_friends(self.to_user, self.from_user):
+        if not Friendship.objects.in_active_relation(self.to_user, self.from_user):
             self.status = "6"
             self.save()
 
-
+    def cancel(self):
+        if not Friendship.objects.in_active_relation(self.to_user, self.from_user):
+            self.status = "8"
+            self.save()        
+    
 class FriendshipInvitationHistory(models.Model):
     """
     History for friendship invitations
@@ -217,8 +343,7 @@ class FriendshipInvitationHistory(models.Model):
     status = models.CharField(max_length=1, choices=INVITE_STATUS)
 
 
-if EmailAddress:
-    def new_user(sender, instance, **kwargs):
+def new_user(sender, instance, **kwargs):
         if instance.verified:
             for join_invitation in JoinInvitation.objects.filter(contact__email=instance.email):
                 if join_invitation.status not in ["5", "7"]: # if not accepted or already marked as joined independently
@@ -230,7 +355,7 @@ if EmailAddress:
                 # @@@ send notification
     
     # only if django-email-notification is installed
-    signals.post_save.connect(new_user, sender=EmailAddress)
+signals.post_save.connect(new_user, sender=EmailAddress)
 
 def delete_friendship(sender, instance, **kwargs):
     friendship_invitations = FriendshipInvitation.objects.filter(to_user=instance.to_user, from_user=instance.from_user)
