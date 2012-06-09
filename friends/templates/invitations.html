@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load i18n %}  
+{% block head_title %}{% trans "Invitations" %}{% endblock %}
+{% block extra_head %}
+	<meta name="keywords" content="Friends, invitations"/>
+	<meta name="description" content="Friends, invitations."/>	
+{% endblock %}
+{% block content %}
+<div class="row"> 
+	<div class="span6 offset3">
+		<div class="row">
+		<h3>{% trans 'Share plangr on:' %}</h3><br/>		
+			<a class="facebook" target="_blank" title="Share on Facebook" href="http://facebook.com/share.php?u=http://www.plangr.com">		
+			<div class="span-1">
+				<span class="thumbnail">
+					<img src="/media/images/facebook.png" alt="facebook"></img>
+				</span>
+			</div>				
+			</a>			
+			<a class="twitter" target="_blank" title="Share on Twitter" href="http://twitter.com/?status=join%20+me%20+on%20+the%20+first%20+geo-social%20+calendar%20+http://www.plangr.com">	
+			<div class="span-1">
+				<span class="thumbnail">
+					<img src="/media/images/twitter.png" alt="twitter"></img>
+				</span>
+			</div>
+			</a>		
+			<a class="digg" target="_blank" title="Share on Digg" href="http://digg.com/submit?url=http%3A//plangr.com&amp;title=Plangr%3A%20The%20New%20Geo-Social%20Calendar%3F">
+				<span style="display:none">
+						Plangr is the first geo-calendar-social calendar that shows people what’s happening today, tomorrow and beyond, among their personal networks.
+				</span>		
+			<div class="span-1">
+				<span class="thumbnail">
+					<img src="/media/images/digg.png" alt="digg"></img>
+				</span>
+			</div>			
+			</a>		
+			<a class="reddit" target="_blank" title="Submit to Reddit" href="http://reddit.com/submit?url=http%3A//plangr.com">	
+			<div class="span-1">
+				<span class="thumbnail">
+					<img src="/media/images/reddit.png" alt="reddit"></img>
+				</span>
+			</div>			
+			</a>		
+		</div>
+		<hr>			
+		<div class="row">
+		<h3>{% trans 'Invite friends to join:' %}</h3><br/>
+			<form id="join-invite" class="well" method="POST" action="{% url friends_invitations %}">
+			    <p>{% trans "If you'd like to invite someone to join, you can enter their email address and a message for them below:" %}</p>
+			    <table>
+			        {{ join_request_form.as_table }}
+			        <tr><td></td><td><input type="hidden" name="action" value="invite" /><input type="submit" value="{% trans "invite" %}" class="btn"/></td></tr>
+			    </table>
+			</form>			 
+		</div>
+	</div>
+</div>
+{% endblock %}
+
+{% block extra_content %}
+    <script type="text/javascript">
+        $(document).ready(function() {			
+			$('a.a_friends_invitations').parent().addClass('active');			            		 
+        });
+    </script>
+{% endblock %}

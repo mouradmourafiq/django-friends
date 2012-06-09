@@ -1,0 +1,19 @@
+{% load i18n %}
+{% load friends_tags %}
+	{% if status == 'friends' %}				
+		<a class="btn btn-mini" href="{{ to_user|remove_relationship_url:'unfriend' }}" onclick="window.location = $(this).attr('href');"> {% trans 'unfriend' %}</a>
+	{% else %}
+		{% if status == 'followers' %}
+			<a class="btn btn-mini" href="{{ to_user|remove_relationship_url:'unfollow' }}" onclick="window.location = $(this).attr('href');" ><i class="icon-minus"></i> {% trans 'unfollow' %}</a>
+		{% else %}
+			{% if status == 'invited' %}
+				<form id="cancel" method="post" action="{% url friends_invitations %}" style="margin-bottom: 0px;">
+                            <input type="hidden" name="invitation" value="{{ invitation.id }}"/>
+                            <input type="hidden" name="action" value="cancel"/>
+                            <input type="submit" value="{% trans 'cancel' %}" class="btn btn-mini"/>
+                 </form>
+			{% else %}				
+				<a class="btn btn-mini" href="{{to_user|add_relationship_url:"follow" }}" onclick="window.location = $(this).attr('href');"><i class="icon-share-alt"></i> {% trans 'follow' %}</a>												
+			{% endif %}
+		{% endif %}
+	{% endif%}

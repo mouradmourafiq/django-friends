@@ -1,0 +1,31 @@
+{% load i18n %}  
+{% load friends_tags %}
+{% load endless %}
+
+{% block content %}
+{% for friend in list_friends %}       
+ <li class="span2-5 span-masonry">
+    <div class="thumbnail">
+    	{% if not friend.get_profile.attachment_profile %}
+      		<img src="/media/profile.png" alt="{{user_profile.first_name}} {{user_profile.last_name}}"></img>
+		{% else %}			
+			<img src="{{friend.get_profile.attachment_profile}}" alt="{{user_profile.first_name}} {{user_profile.last_name}}" class="cal-picture"></img>
+		{% endif %}
+		<div class="caption">  
+	      <h5><a href="{{ friend.get_profile.get_absolute_url }}">{{ friend.first_name }} {{ friend.last_name }}</a></h5>
+	      <p>	      
+		  <span class="button translate">
+		  	{% relation_buttons user friend %}
+		  </span>
+		</div>
+    </div>
+  </li>         
+{% endfor %}
+{% endblock %}
+{% block extra_content %}
+    <script type="text/javascript">
+        $(document).ready(function() {			    
+			$(".endless_more").addClass('btn');      
+        });
+    </script>
+{% endblock %}
