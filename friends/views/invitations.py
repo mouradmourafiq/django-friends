@@ -1,13 +1,4 @@
 # -*- coding: utf-8 -*-
-'''
-Created on Mar 01, 2011
-
-@author: Mourad Mourafiq
-
-@copyright: Copyright © 2011
-
-other contributers:
-'''
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render_to_response, get_object_or_404, HttpResponse, HttpResponseRedirect
 from django.core.urlresolvers import reverse

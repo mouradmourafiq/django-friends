@@ -1,13 +1,4 @@
 # -*- coding: utf-8 -*-
-'''
-Created on Mars 01, 2011
-
-@author: Mourad Mourafiq
-
-@copyright: Copyright © 2011
-
-other contributers:
-'''
 from django import template
 from django.utils.encoding import smart_str
 from django.core.urlresolvers import reverse, NoReverseMatch
